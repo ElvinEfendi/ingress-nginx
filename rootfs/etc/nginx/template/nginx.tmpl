@@ -855,7 +855,7 @@ stream {
         ssl_stapling_verify                     on;
         {{ end }}
 
-        {{ if $all.DynamicCertificatesEnabled}}
+        {{ if and (ne $server.Hostname "_") $all.DynamicCertificatesEnabled }}
         ssl_certificate_by_lua_block {
             certificate.call()
         }
