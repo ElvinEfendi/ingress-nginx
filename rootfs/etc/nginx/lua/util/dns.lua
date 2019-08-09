@@ -11,6 +11,10 @@ if not cache then
   return error("failed to create the cache: " .. (err or "unknown"))
 end
 
+local function is_fully_qualified(host)
+  return host:sub(-1) == "."
+end
+
 local function a_records_and_max_ttl(answers)
   local addresses = {}
   local ttl = MAXIMUM_TTL_VALUE -- maximum value according to https://tools.ietf.org/html/rfc2181
@@ -27,15 +31,15 @@ local function a_records_and_max_ttl(answers)
   return addresses, ttl
 end
 
-local function resolve_host(host, r, qtype)
+local function resolve_host_for_qtype(r, host, qtype)
   local answers
   answers, err = r:query(host, { qtype = qtype }, {})
   if not answers then
-    return nil, -1, tostring(err)
+    return nil, -1, string.format("error while resolving %s: %s", host, err)
   end
 
   if answers.errcode then
-    return nil, -1, string.format("server returned error code: %s: %s", answers.errcode, answers.errstr)
+    return nil, -1, string.format("server returned error code when resolving %s: %s: %s", host, answers.errcode, answers.errstr)
   end
 
   local addresses, ttl = a_records_and_max_ttl(answers)
@@ -44,6 +48,27 @@ local function resolve_host(host, r, qtype)
   end
 
   return addresses, ttl, nil
+end
+
+local function resolve_host(r, host)
+  local dns_errors = {}
+
+  local addresses, ttl
+  addresses, ttl, err = resolve_host_for_qtype(r, host, r.TYPE_A)
+  if not addresses then
+    table.insert(dns_errors, tostring(err))
+  elseif #addresses > 0 then
+    return addresses, ttl, nil
+  end
+
+  addresses, ttl, err = resolve_host_for_qtype(r, host, r.TYPE_AAAA)
+  if not addresses then
+    table.insert(dns_errors, tostring(err))
+  elseif #addresses > 0 then
+    return addresses, ttl, nil
+  end
+
+  return nil, nil, dns_errors
 end
 
 function _M.resolve(host)
@@ -68,23 +93,44 @@ function _M.resolve(host)
     return { host }
   end
 
-  local dns_errors = {}
+  local addresses, tll, dns_errors = nil, nil, {}
 
-  local addresses, ttl
-  addresses, ttl, err = resolve_host(host, r, r.TYPE_A)
-  if not addresses then
-    table.insert(dns_errors, tostring(err))
-  elseif #addresses > 0 then
-    cache:set(host, addresses, ttl)
-    return addresses
+  -- when the queried is a fully qualified domain
+  -- then we don't go through resolv_conf.search
+  if is_fully_qualified(host) then
+    addresses, tll, dns_errors = resolve_host(r, host)
+    if addresses then
+      cache:set(host, addresses, ttl)
+      return addresses
+    end
+
+    ngx.log(ngx.ERR, "failed to query the DNS server:\n" .. table.concat(dns_errors, "\n"))
+
+    return { host }
   end
 
-  addresses, ttl, err = resolve_host(host, r, r.TYPE_AAAA)
-  if not addresses then
-    table.insert(dns_errors, tostring(err))
-  elseif #addresses > 0 then
-    cache:set(host, addresses, ttl)
-    return addresses
+  -- for non fully qualified domains if number of dots in
+  -- the queried hos is less than resolv_conf.ndots then we try
+  -- with all the entries in resolv_conf.search before trying the original host
+  --
+  -- if number of dots is not less than resolv_conf.ndots then we start with
+  -- the original host and then try entries in resolv_conf.search
+  local _, host_ndots = host:gsub("%.", "")
+  local search_start, search_end = 0, #resolv_conf.search
+  if host_ndots < resolv_conf.ndots then
+    search_start = 1
+    search_end = #resolv_conf.search + 1
+  end
+
+  for i = search_start,search_end,1 do
+    local new_host = resolv_conf.search[i] and host.."."..resolv_conf.search[i] or host
+    ngx.log(ngx.WARN, "[XIYAR] host: " .. new_host)
+
+    addresses, tll, dns_errors = resolve_host(r, new_host)
+    if addresses then
+      cache:set(host, addresses, ttl)
+      return addresses
+    end
   end
 
   if #dns_errors > 0 then
