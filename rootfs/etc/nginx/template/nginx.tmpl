@@ -63,7 +63,14 @@ http {
           error("require failed: " .. tostring(res))
         else
           lua_ingress = res
-          lua_ingress.set_config({{ configForLua $all }})
+        end
+
+        ok, res = pcall(require, "general_config")
+        if not ok then
+          error("require failed: " .. tostring(res))
+        else
+          general_config = res
+          general_config.set_config({{ configForLua $all }})
         end
 
         ok, res = pcall(require, "configuration")

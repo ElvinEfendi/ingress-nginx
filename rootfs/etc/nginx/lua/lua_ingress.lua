@@ -1,6 +1,7 @@
 local ngx_re_split = require("ngx.re").split
 
 local certificate_configured_for_current_request = require("certificate").configured_for_current_request
+local general_config = require("general_config")
 
 local original_randomseed = math.randomseed
 local string_format = string.format
@@ -9,8 +10,6 @@ local ngx_redirect = ngx.redirect
 local _M = {}
 
 local seeds = {}
--- general Nginx configuration passed by controller to be used in this module
-local config
 
 local function get_seed_from_urandom()
   local seed
@@ -96,10 +95,6 @@ function _M.init_worker()
   randomseed()
 end
 
-function _M.set_config(new_config)
-  config = new_config
-end
-
 -- rewrite gets called in every location context.
 -- This is where we do variable assignments to be used in subsequent
 -- phases or redirection
@@ -107,7 +102,7 @@ function _M.rewrite(location_config)
   ngx.var.pass_access_scheme = ngx.var.scheme
   ngx.var.best_http_host = ngx.var.http_host or ngx.var.host
 
-  if config.use_forwarded_headers then
+  if general_config.use_forwarded_headers then
     -- trust http_x_forwarded_proto headers correctly indicate ssl offloading
     if ngx.var.http_x_forwarded_proto then
       ngx.var.pass_access_scheme = ngx.var.http_x_forwarded_proto
@@ -123,18 +118,18 @@ function _M.rewrite(location_config)
     end
   end
 
-  if config.use_proxy_protocol then
+  if general_config.use_proxy_protocol then
     if ngx.var.proxy_protocol_server_port == "443" then
       ngx.var.pass_access_scheme = "https"
     end
   end
 
   ngx.var.pass_port = ngx.var.pass_server_port
-  if config.is_ssl_passthrough_enabled then
-    if ngx.var.pass_server_port == config.listen_ports.ssl_proxy then
+  if general_config.is_ssl_passthrough_enabled then
+    if ngx.var.pass_server_port == general_config.listen_ports.ssl_proxy then
       ngx.var.pass_port = 443
     end
-  elseif ngx.var.pass_server_port == config.listen_ports.https then
+  elseif ngx.var.pass_server_port == general_config.listen_ports.https then
     ngx.var.pass_port = 443
   end
 
@@ -142,20 +137,20 @@ function _M.rewrite(location_config)
     local uri = string_format("https://%s%s", redirect_host(), ngx.var.request_uri)
 
     if location_config.use_port_in_redirects then
-      uri = string_format("https://%s:%s%s", redirect_host(), config.listen_ports.https, ngx.var.request_uri)
+      uri = string_format("https://%s:%s%s", redirect_host(), general_config.listen_ports.https, ngx.var.request_uri)
     end
 
-    ngx_redirect(uri, config.http_redirect_code)
+    ngx_redirect(uri, general_config.http_redirect_code)
   end
 end
 
 function _M.header()
-  if config.hsts and ngx.var.scheme == "https" and certificate_configured_for_current_request then
-    local value = "max-age=" .. config.hsts_max_age
-    if config.hsts_include_subdomains then
+  if general_config.hsts and ngx.var.scheme == "https" and certificate_configured_for_current_request then
+    local value = "max-age=" .. general_config.hsts_max_age
+    if general_config.hsts_include_subdomains then
       value = value .. "; includeSubDomains"
     end
-    if config.hsts_preload then
+    if general_config.hsts_preload then
       value = value .. "; preload"
     end
     ngx.header["Strict-Transport-Security"] = value
