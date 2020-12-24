@@ -18,6 +18,7 @@ package framework
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/onsi/ginkgo"
@@ -426,4 +427,9 @@ func (f *Framework) UpdateIngressControllerDeployment(fn func(deployment *appsv1
 	}
 
 	return f.updateIngressNGINXPod()
+}
+
+// ServiceAddressFor returns full service FQDN deployed to f.Namespace for the given service name
+func (f *Framework) ServiceAddressFor(serviceName string) string {
+	return fmt.Sprintf("%v.%v.svc.cluster.local", serviceName, f.Namespace)
 }
