@@ -289,6 +289,9 @@ func configForLua(input interface{}) string {
 		hsts_max_age = %v,
 		hsts_include_subdomains = %t,
 		hsts_preload = %t,
+
+		memcached_host = "%v",
+		memcached_port = %v,
 	}`,
 		all.Cfg.UseForwardedHeaders,
 		all.Cfg.UseProxyProtocol,
@@ -301,6 +304,9 @@ func configForLua(input interface{}) string {
 		all.Cfg.HSTSMaxAge,
 		all.Cfg.HSTSIncludeSubdomains,
 		all.Cfg.HSTSPreload,
+
+		all.Cfg.MemcachedHost,
+		all.Cfg.MemcachedPort,
 	)
 }
 
@@ -323,11 +329,16 @@ func locationConfigForLua(l interface{}, a interface{}) string {
 		ssl_redirect = %t,
 		force_no_ssl_redirect = %t,
 		use_port_in_redirects = %t,
+		global_throttle = { namespace = "%v", limit = %d, window_size = %d, key = %v },
 	}`,
 		location.Rewrite.ForceSSLRedirect,
 		location.Rewrite.SSLRedirect,
 		isLocationInLocationList(l, all.Cfg.NoTLSRedirectLocations),
 		location.UsePortInRedirects,
+		location.GlobalRateLimit.Namespace,
+		location.GlobalRateLimit.Limit,
+		location.GlobalRateLimit.WindowSize,
+		parseComplexNginxVarIntoLuaTable(location.GlobalRateLimit.Key),
 	)
 }
 
@@ -1500,4 +1511,35 @@ func buildServerName(hostname string) string {
 	parts := strings.Split(hostname, ".")
 
 	return `~^(?<subdomain>[\w-]+)\.` + strings.Join(parts, "\\.") + `$`
+}
+
+// parseComplexNGINXVar parses things like "$my${complex}ngx\$var" into
+// [["$var", "complex", "my", "ngx"]]. In other words, 2nd and 3rd elements
+// in the result are actual NGINX variable names, whereas first and 4th elements
+// are string literals.
+func parseComplexNginxVarIntoLuaTable(ngxVar string) string {
+	r := regexp.MustCompile(`(\\\$[0-9a-zA-Z_]+)|\$\{([0-9a-zA-Z_]+)\}|\$([0-9a-zA-Z_]+)|(\$|[^$\\]+)`)
+	matches := r.FindAllStringSubmatch(ngxVar, -1)
+	componentsSet := make([][]string, len(matches))
+	for i, match := range matches {
+		componentsSet[i] = match[1:]
+	}
+
+	resultSet := "{"
+	for _, components := range componentsSet {
+		result := "{"
+		for _, comp := range components {
+			if len(comp) == 0 {
+				result = result + "nil, "
+			} else {
+				result = result + "\"" + comp + "\", "
+			}
+		}
+		result += "}, "
+
+		resultSet = resultSet + result
+	}
+	resultSet += "}"
+
+	return resultSet
 }

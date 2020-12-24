@@ -1472,3 +1472,27 @@ func TestBuildServerName(t *testing.T) {
 		}
 	}
 }
+
+func TestParseComplexNginxVarIntoLuaTable(t *testing.T) {
+	testCases := []struct {
+		ngxVar           string
+		expectedLuaTable string
+	}{
+		{"foo", `{{nil, nil, nil, "foo", }, }`},
+		{"$foo", `{{nil, nil, "foo", nil, }, }`},
+		{"${foo}", `{{nil, "foo", nil, nil, }, }`},
+		{"\\$foo", `{{"\$foo", nil, nil, nil, }, }`},
+		{
+			"foo\\$bar$baz${daz}xiyar$pomidor",
+			`{{nil, nil, nil, "foo", }, {"\$bar", nil, nil, nil, }, {nil, nil, "baz", nil, }, ` +
+				`{nil, "daz", nil, nil, }, {nil, nil, nil, "xiyar", }, {nil, nil, "pomidor", nil, }, }`,
+		},
+	}
+
+	for _, testCase := range testCases {
+		actualLuaTable := parseComplexNginxVarIntoLuaTable(testCase.ngxVar)
+		if actualLuaTable != testCase.expectedLuaTable {
+			t.Errorf("expected %v but returned %v", testCase.expectedLuaTable, actualLuaTable)
+		}
+	}
+}

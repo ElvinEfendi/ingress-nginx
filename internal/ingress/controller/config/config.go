@@ -708,6 +708,12 @@ type Configuration struct {
 	// http://nginx.org/en/docs/http/ngx_http_core_module.html#default_type
 	// Default: text/html
 	DefaultType string `json:"default-type"`
+
+	// MemcachedHost configures memcached host
+	MemcachedHost string `json:"memcached-host"`
+
+	// MemcachedPort configures memcached port
+	MemcachedPort int `json:"memcached-port"`
 }
 
 // NewDefault returns the default nginx configuration

@@ -1,0 +1,228 @@
+local util = require("util")
+
+local function assert_request_rejected(config, location_config, opts)
+  stub(ngx, "exit")
+
+  local global_throttle = require_without_cache("global_throttle")
+  assert.has_no.errors(function()
+    global_throttle.throttle(config, location_config)
+  end)
+
+  assert.stub(ngx.exit).was_called_with(ngx.HTTP_TOO_MANY_REQUESTS)
+  if opts.with_cache then
+    assert.are.same("c", ngx.var.global_rate_limit_exceeding)
+  else
+    assert.are.same("y", ngx.var.global_rate_limit_exceeding)
+  end
+end
+
+local function assert_request_not_rejected(config, location_config)
+  stub(ngx, "exit")
+  stub(ngx.shared.global_throttle_cache, "safe_add")
+
+  local global_throttle = require_without_cache("global_throttle")
+  assert.has_no.errors(function()
+    global_throttle.throttle(config, location_config)
+  end)
+
+  assert.stub(ngx.exit).was_not_called()
+  assert.is_nil(ngx.var.global_rate_limit_exceeding)
+  assert.stub(ngx.shared.global_throttle_cache.safe_add).was_not_called()
+end
+
+local function assert_short_circuits(f)
+  local resty_global_throttle = require_without_cache("resty.global_throttle")
+  local resty_global_throttle_new_spy = spy.on(resty_global_throttle, "new")
+
+  f()
+
+  assert.spy(resty_global_throttle_new_spy).was_not_called()
+end
+
+local function assert_fails_open(config, location_config, ...)
+  stub(ngx, "exit")
+  stub(ngx, "log")
+
+  local global_throttle = require_without_cache("global_throttle")
+
+  assert.has_no.errors(function()
+    global_throttle.throttle(config, location_config)
+  end)
+
+  assert.stub(ngx.exit).was_not_called()
+  assert.stub(ngx.log).was_called_with(ngx.ERR, ...)
+  assert.is_nil(ngx.var.global_rate_limit_exceeding)
+end
+
+local function stub_resty_global_throttle_process(ret1, ret2, ret3, f)
+  local resty_global_throttle = require_without_cache("resty.global_throttle")
+  local resty_global_throttle_mock = {
+    process = function(self, key) return ret1, ret2, ret3 end
+  }
+  stub(resty_global_throttle, "new", resty_global_throttle_mock)
+
+  f()
+
+  assert.stub(resty_global_throttle.new).was_called()
+end
+
+describe("global_throttle", function()
+  local NAMESPACE = "31285d47b1504dcfbd6f12c46d769f6e"
+  local LOCATION_CONFIG = {
+    global_throttle = { namespace = NAMESPACE, limit = 10, window_size = 60, key = nil }
+  }
+  local CONFIG = { memcached_host = "memc.default.svc.cluster.local", memcached_port = "11211" }
+
+  before_each(function()
+    ngx.var = { remote_addr = "127.0.0.1", global_rate_limit_exceeding = nil }
+  end)
+
+  after_each(function()
+    ngx.shared.global_throttle_cache:flush_all()
+    reset_ngx()
+  end)
+
+  it("short circuits when memcached is not configured", function()
+    assert_short_circuits(function()
+      local global_throttle = require_without_cache("global_throttle")
+      assert.has_no.errors(function()
+        global_throttle.throttle({ memcached_host = "", memcached_port = 0 }, LOCATION_CONFIG)
+      end)
+    end)
+  end)
+
+  it("short circuits when limit or window_size is not configured", function()
+    assert_short_circuits(function()
+      local global_throttle = require_without_cache("global_throttle")
+      local location_config_copy = util.deepcopy(LOCATION_CONFIG)
+      location_config_copy.global_throttle.limit = 0
+      assert.has_no.errors(function()
+        global_throttle.throttle(CONFIG, location_config_copy)
+      end)
+    end)
+
+    assert_short_circuits(function()
+      local global_throttle = require_without_cache("global_throttle")
+      local location_config_copy = util.deepcopy(LOCATION_CONFIG)
+      location_config_copy.global_throttle.window_size = 0
+      assert.has_no.errors(function()
+        global_throttle.throttle(CONFIG, location_config_copy)
+      end)
+    end)
+  end)
+
+  describe("when exceeding limit has already been cached", function()
+    local key_value = "foo"
+    local location_config = util.deepcopy(LOCATION_CONFIG)
+    location_config.global_throttle.key = { { nil, nil, nil, key_value } }
+
+    before_each(function()
+      local namespaced_key_value = NAMESPACE .. key_value
+      local ok, err = ngx.shared.global_throttle_cache:safe_add(namespaced_key_value, true, 0.5)
+      assert.is_true(ok)
+      assert.is_nil(err)
+    end)
+
+    it("uses namespaced key to access decision cache", function()
+      assert_request_rejected(CONFIG, location_config, { with_cache = true })
+    end)
+
+    it("short circuits", function()
+      assert_short_circuits(function()
+        assert_request_rejected(CONFIG, location_config, { with_cache = true })
+      end)
+    end)
+  end)
+
+  describe("when resty_global_throttle fails", function()
+    it("fails open in case of initialization error", function()
+      local too_long_namespace = ""
+      for i=1,36,1 do
+        too_long_namespace = too_long_namespace .. "a"
+      end
+
+      local location_config = util.deepcopy(LOCATION_CONFIG)
+      location_config.global_throttle.namespace = too_long_namespace
+
+      assert_fails_open(CONFIG, location_config, "faled to initialize resty_global_throttle: ", "'namespace' can be at most 35 characters")
+    end)
+
+    it("fails open in case of key processing error", function()
+      stub_resty_global_throttle_process(nil, nil, "failed to process", function()
+        assert_fails_open(CONFIG, LOCATION_CONFIG, "error while processing key: ", "failed to process")
+      end)
+    end)
+  end)
+
+  it("initializes resty_global_throttle with the right parameters", function()
+    local resty_global_throttle = require_without_cache("resty.global_throttle")
+    local resty_global_throttle_original_new = resty_global_throttle.new
+    resty_global_throttle.new = function(namespace, limit, window_size, store_opts)
+      local o, err = resty_global_throttle_original_new(namespace, limit, window_size, store_opts)
+      if not o then
+        return nil, err
+      end
+      o.process = function(self, key) return 1, nil, nil end
+
+      local expected = LOCATION_CONFIG.global_throttle
+      assert.are.same(expected.namespace, namespace)
+      assert.are.same(expected.limit, limit)
+      assert.are.same(expected.window_size, window_size)
+
+      assert.are.same("memcached", store_opts.provider)
+      assert.are.same(CONFIG.memcached_host, store_opts.host)
+      assert.are.same(CONFIG.memcached_port, store_opts.port)
+      assert.are.same(50, store_opts.connect_timeout)
+      assert.are.same(10000, store_opts.max_idle_timeout)
+      assert.are.same(50, store_opts.pool_size)
+
+      return o, nil
+    end
+    local resty_global_throttle_new_spy = spy.on(resty_global_throttle, "new")
+
+    local global_throttle = require_without_cache("global_throttle")
+
+    assert.has_no.errors(function()
+      global_throttle.throttle(CONFIG, LOCATION_CONFIG)
+    end)
+
+    assert.spy(resty_global_throttle_new_spy).was_called()
+  end)
+
+  it("rejects request and caches decision when limit is exceeding after processing a key", function()
+    local desired_delay = 0.015
+
+    stub_resty_global_throttle_process(LOCATION_CONFIG.global_throttle.limit + 1, desired_delay, nil, function()
+      assert_request_rejected(CONFIG, LOCATION_CONFIG, { with_cache = false })
+
+      local cache_key = LOCATION_CONFIG.global_throttle.namespace .. ngx.var.remote_addr
+      assert.is_true(ngx.shared.global_throttle_cache:get(cache_key))
+
+      -- we assume it won't take more than this  after caching
+      -- until we execute the assertion below
+      local delta = 0.001
+      local ttl = ngx.shared.global_throttle_cache:ttl(cache_key)
+      assert.is_true(ttl > desired_delay - delta)
+      assert.is_true(ttl <= desired_delay)
+    end)
+  end)
+
+  it("rejects request and skip caching of decision when limit is exceeding after processing a key but desired delay is lower than the threshold", function()
+    local desired_delay = 0.0009
+
+    stub_resty_global_throttle_process(LOCATION_CONFIG.global_throttle.limit, desired_delay, nil, function()
+      assert_request_rejected(CONFIG, LOCATION_CONFIG, { with_cache = false })
+
+      local cache_key = LOCATION_CONFIG.global_throttle.namespace .. ngx.var.remote_addr
+      assert.is_nil(ngx.shared.global_throttle_cache:get(cache_key))
+    end)
+  end)
+
+  it("allows the request when limit is not exceeding after processing a key", function()
+    stub_resty_global_throttle_process(LOCATION_CONFIG.global_throttle.limit - 3, nil, nil,
+      function()
+        assert_request_not_rejected(CONFIG, LOCATION_CONFIG)
+      end
+    )
+  end)
+end)
