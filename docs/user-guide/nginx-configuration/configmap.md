@@ -192,6 +192,8 @@ The following table shows a configuration option's name, type, and the default v
 |[block-referers](#block-referers)|[]string|""|
 |[proxy-ssl-location-only](#proxy-ssl-location-only)|bool|"false"|
 |[default-type](#default-type)|string|"text/html"|
+|[memcached-host](#memcached)|string|""|
+|[memcached-port](#memcached)|int|0|
 
 ## add-headers
 
@@ -1152,3 +1154,12 @@ _**default:**_ text/html
 
 _References:_
 [http://nginx.org/en/docs/http/ngx_http_core_module.html#default_type](http://nginx.org/en/docs/http/ngx_http_core_module.html#default_type)
+
+## memcached
+
+Set `memcached-host` and `memcached-port` settings to activate
+global rate limiting functionality that can be customized per app using
+the [relevant annotations](https://github.com/kubernetes/ingress-nginx/blob/master/docs/user-guide/nginx-configuration/annotations.md#global-rate-limiting).
+
+These settings get used by [lua-resty-global-throttle](https://github.com/ElvinEfendi/lua-resty-global-throttle)
+that ingress-nginx includes. Refer to the link to learn more about `lua-resty-global-throttle`.
