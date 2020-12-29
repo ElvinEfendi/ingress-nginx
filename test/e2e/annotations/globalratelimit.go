@@ -17,6 +17,7 @@ limitations under the License.
 package annotations
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/onsi/ginkgo"
