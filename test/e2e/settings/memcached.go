@@ -19,6 +19,7 @@ package settings
 import (
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/onsi/ginkgo"
@@ -56,11 +57,13 @@ var _ = framework.DescribeSetting("memcached", func() {
 		memcachedMaxIdleTimeout := 5000
 		memcachedPoolSize := 100
 
-		f.UpdateNginxConfigMapData("memcached-host", memcachedHost)
-		f.UpdateNginxConfigMapData("memcached-port", strconv.Itoa(memcachedPort))
-		f.UpdateNginxConfigMapData("memcached-connect-timeout", strconv.Itoa(memcachedConnectTimeout))
-		f.UpdateNginxConfigMapData("memcached-max-idle-timeout", strconv.Itoa(memcachedMaxIdleTimeout))
-		f.UpdateNginxConfigMapData("memcached-pool-size", strconv.Itoa(memcachedPoolSize))
+		f.SetNginxConfigMapData(map[string]string{
+			"memcached-host":             memcachedHost,
+			"memcached-port":             strconv.Itoa(memcachedPort),
+			"memcached-connect-timeout":  strconv.Itoa(memcachedConnectTimeout),
+			"memcached-max-idle-timeout": strconv.Itoa(memcachedMaxIdleTimeout),
+			"memcached-pool-size":        strconv.Itoa(memcachedPoolSize),
+		})
 
 		f.WaitForNginxConfiguration(func(cfg string) bool {
 			return strings.Contains(cfg,
