@@ -17,6 +17,8 @@ limitations under the License.
 package annotations
 
 import (
+	"strings"
+
 	"github.com/onsi/ginkgo"
 
 	"k8s.io/ingress-nginx/test/e2e/framework"
@@ -46,7 +48,7 @@ var _ = framework.DescribeAnnotation("global-rate-limit", func() {
 
 		ginkgo.By("regenerating the correct configuration after update")
 		annotations["nginx.ingress.kubernetes.io/global-rate-key"] = "${remote_addr}${http_x_api_client}"
-		ing.SetAnnotations(annotation)
+		ing.SetAnnotations(annotations)
 		f.UpdateIngress(ing)
 		f.WaitForNginxServer(host, func(server string) bool {
 			return strings.Contains(server,
