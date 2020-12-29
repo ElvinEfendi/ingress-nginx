@@ -71,7 +71,12 @@ describe("global_throttle", function()
   local LOCATION_CONFIG = {
     global_throttle = { namespace = NAMESPACE, limit = 10, window_size = 60, key = nil }
   }
-  local CONFIG = { memcached_host = "memc.default.svc.cluster.local", memcached_port = "11211" }
+  local CONFIG = {
+    memcached = {
+      host = "memc.default.svc.cluster.local", port = 11211,
+      connect_timeout = 50, max_idle_timeout = 10000, pool_size = 50,
+    }
+  }
 
   before_each(function()
     ngx.var = { remote_addr = "127.0.0.1", global_rate_limit_exceeding = nil }
@@ -86,7 +91,7 @@ describe("global_throttle", function()
     assert_short_circuits(function()
       local global_throttle = require_without_cache("global_throttle")
       assert.has_no.errors(function()
-        global_throttle.throttle({ memcached_host = "", memcached_port = 0 }, LOCATION_CONFIG)
+        global_throttle.throttle({ memcached = { host = "", port = 0 } }, LOCATION_CONFIG)
       end)
     end)
   end)
@@ -170,11 +175,11 @@ describe("global_throttle", function()
       assert.are.same(expected.window_size, window_size)
 
       assert.are.same("memcached", store_opts.provider)
-      assert.are.same(CONFIG.memcached_host, store_opts.host)
-      assert.are.same(CONFIG.memcached_port, store_opts.port)
-      assert.are.same(50, store_opts.connect_timeout)
-      assert.are.same(10000, store_opts.max_idle_timeout)
-      assert.are.same(50, store_opts.pool_size)
+      assert.are.same(CONFIG.memcached.host, store_opts.host)
+      assert.are.same(CONFIG.memcached.port, store_opts.port)
+      assert.are.same(CONFIG.memcached.connect_timeout, store_opts.connect_timeout)
+      assert.are.same(CONFIG.memcached.max_idle_timeout, store_opts.max_idle_timeout)
+      assert.are.same(CONFIG.memcached.pool_size, store_opts.pool_size)
 
       return o, nil
     end

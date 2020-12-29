@@ -20,7 +20,7 @@ local CACHE_THRESHOLD = 0.001
 local DEFAULT_RAW_KEY = "remote_addr"
 
 local function is_enabled(config, location_config)
-  if config.memcached_host == "" or config.memcached_port == 0 then
+  if config.memcached.host == "" or config.memcached.port == 0 then
     return false
   end
   if location_config.global_throttle.limit == 0 or
@@ -59,14 +59,11 @@ function _M.throttle(config, location_config)
     location_config.global_throttle.window_size,
     {
       provider = "memcached",
-      host = config.memcached_host,
-      port = config.memcached_port,
-      -- TODO: get the following configs from configmap too
-      connect_timeout = 50, -- milliseconds
-      max_idle_timeout = 10000, -- milliseconds
-      -- one has to make sure their memcached server can keep
-      -- (pool_size * worker count * replicas) connections open
-      pool_size = 50,
+      host = config.memcached.host,
+      port = config.memcached.port,
+      connect_timeout = config.memcached.connect_timeout,
+      max_idle_timeout = config.memcached.max_idle_timeout,
+      pool_size = config.memcached.pool_size,
     }
   )
   if err then

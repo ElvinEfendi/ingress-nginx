@@ -714,6 +714,19 @@ type Configuration struct {
 
 	// MemcachedPort configures memcached port
 	MemcachedPort int `json:"memcached-port"`
+
+	// MemcachedConnectTimeout configures timeout when connecting to memcached
+	// The unit is millisecond.
+	MemcachedConnectTimeout int `json:"memcached-connect-timeout"`
+
+	// MemcachedMaxIdleTimeout configured how long connections should be kept alive in idle state
+	// The unit is millisecond.
+	MemcachedMaxIdleTimeout int `json:"memcached-max-idle-timeout"`
+
+	// MemcachedPoolSize configures how many connections should be kept alive in the pool
+	// Note that this is per NGINX worker. Make sure your memcached server can
+	// handle `MemcachedPoolSize * <nginx worker count> * <nginx replica count>` simultaneous connections.
+	MemcachedPoolSize int `json:"memcached-pool-size"`
 }
 
 // NewDefault returns the default nginx configuration
@@ -864,6 +877,9 @@ func NewDefault() Configuration {
 		GlobalExternalAuth:           defGlobalExternalAuth,
 		ProxySSLLocationOnly:         false,
 		DefaultType:                  "text/html",
+		MemcachedConnectTimeout:      50,
+		MemcachedMaxIdleTimeout:      10000,
+		MemcachedPoolSize:            50,
 	}
 
 	if klog.V(5).Enabled() {
