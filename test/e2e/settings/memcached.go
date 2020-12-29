@@ -42,8 +42,8 @@ var _ = framework.DescribeSetting("memcached", func() {
 
 		f.WaitForNginxConfiguration(func(cfg string) bool {
 			return strings.Contains(cfg,
-				fmt.Sprintf(`memcached = { host = "%v", port = %d, connect_timeout = %d, max_idle_timeout = %d, pool_size = %d}`,
-					"", 0, "50", "10000", "50"))
+				fmt.Sprintf(`memcached = { host = "%v", port = %d, connect_timeout = %d, max_idle_timeout = %d, pool_size = %d }`,
+					"", 0, 50, 10000, 50))
 		})
 
 		f.HTTPTestClient().GET("/").WithHeader("Host", host).Expect().Status(http.StatusOK)
@@ -51,20 +51,20 @@ var _ = framework.DescribeSetting("memcached", func() {
 		ginkgo.By("applying customizations")
 
 		memcachedHost := "memc.default.svc.cluster.local"
-		memcachedPort := "11211"
-		memcachedConnectTimeout := "100"
-		memcachedMaxIdleTimeout := "5000"
-		memcachedPoolSize := "100"
+		memcachedPort := 11211
+		memcachedConnectTimeout := 100
+		memcachedMaxIdleTimeout := 5000
+		memcachedPoolSize := 100
 
 		f.UpdateNginxConfigMapData("memcached-host", memcachedHost)
-		f.UpdateNginxConfigMapData("memcached-port", memcachedPort)
-		f.UpdateNginxConfigMapData("memcached-connect-timeout", memcachedConnectTimeout)
-		f.UpdateNginxConfigMapData("memcached-max-idle-timeout", memcachedMaxIdleTimeout)
-		f.UpdateNginxConfigMapData("memcached-pool-size", memcachedPoolSize)
+		f.UpdateNginxConfigMapData("memcached-port", strconv.Itoa(memcachedPort))
+		f.UpdateNginxConfigMapData("memcached-connect-timeout", strconv.Itoa(memcachedConnectTimeout))
+		f.UpdateNginxConfigMapData("memcached-max-idle-timeout", strconv.Itoa(memcachedMaxIdleTimeout))
+		f.UpdateNginxConfigMapData("memcached-pool-size", strconv.Itoa(memcachedPoolSize))
 
 		f.WaitForNginxConfiguration(func(cfg string) bool {
 			return strings.Contains(cfg,
-				fmt.Sprintf(`memcached = { host = "%v", port = %d, connect_timeout = %d, max_idle_timeout = %d, pool_size = %d}`,
+				fmt.Sprintf(`memcached = { host = "%v", port = %d, connect_timeout = %d, max_idle_timeout = %d, pool_size = %d }`,
 					memcachedHost, memcachedPort, memcachedConnectTimeout, memcachedMaxIdleTimeout, memcachedPoolSize))
 		})
 

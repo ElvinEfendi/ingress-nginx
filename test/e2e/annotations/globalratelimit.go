@@ -41,9 +41,8 @@ var _ = framework.DescribeAnnotation("global-rate-limit", func() {
 			80, annotations)
 		f.EnsureIngress(ing)
 		f.WaitForNginxServer(host, func(server string) bool {
-			return strings.Contains(server,
-				`global_throttle = { namespace = "2dd932d0b48a45ca857eb0124156b717", limit = 5, `+
-					`window_size = 120, key = {{nil, nil, "remote_addr", nil, }, } }`)
+			return strings.Contains(server, fmt.Sprintf(`global_throttle = { namespace = "%v", limit = 5, `+
+				`window_size = 120, key = {{nil, nil, "remote_addr", nil, }, } }`, ing.UID))
 		})
 
 		ginkgo.By("regenerating the correct configuration after update")
@@ -51,10 +50,8 @@ var _ = framework.DescribeAnnotation("global-rate-limit", func() {
 		ing.SetAnnotations(annotations)
 		f.UpdateIngress(ing)
 		f.WaitForNginxServer(host, func(server string) bool {
-			return strings.Contains(server,
-				`global_throttle = { namespace = "2dd932d0b48a45ca857eb0124156b717", limit = 5, `+
-					`window_size = 120, `+
-					`key = {{nil, "remote_addr", nil, nil, }, {nil, "remote_addr", nil, nil, }, } }`)
+			return strings.Contains(server, fmt.Sprintf(`global_throttle = { namespace = "%v", limit = 5, `+
+				`window_size = 120, key = {{nil, "remote_addr", nil, nil, }, {nil, "http_x_api_client", nil, nil, }, } }`, ing.UID))
 		})
 	})
 })

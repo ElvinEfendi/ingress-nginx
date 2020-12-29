@@ -290,7 +290,7 @@ func configForLua(input interface{}) string {
 		hsts_include_subdomains = %t,
 		hsts_preload = %t,
 
-		memcached = { host = "%v", port = %d, connect_timeout = %d, max_idle_timeout = %d, pool_size = %d},
+		memcached = { host = "%v", port = %d, connect_timeout = %d, max_idle_timeout = %d, pool_size = %d },
 	}`,
 		all.Cfg.UseForwardedHeaders,
 		all.Cfg.UseProxyProtocol,
