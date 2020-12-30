@@ -326,12 +326,18 @@ func locationConfigForLua(l interface{}, a interface{}) string {
 		return "{}"
 	}
 
+	ignoredCIDRs, err := convertGoSliceIntoLuaTable(location.GlobalRateLimit.IgnoredCIDRs, false)
+	if err != nil {
+		klog.Errorf("failed to convert %v into Lua table: %q", location.GlobalRateLimit.IgnoredCIDRs, err)
+		ignoredCIDRs = "{}"
+	}
+
 	return fmt.Sprintf(`{
 		force_ssl_redirect = %t,
 		ssl_redirect = %t,
 		force_no_ssl_redirect = %t,
 		use_port_in_redirects = %t,
-		global_throttle = { namespace = "%v", limit = %d, window_size = %d, key = %v },
+		global_throttle = { namespace = "%v", limit = %d, window_size = %d, key = %v, ignored_cidrs = %v },
 	}`,
 		location.Rewrite.ForceSSLRedirect,
 		location.Rewrite.SSLRedirect,
@@ -341,6 +347,7 @@ func locationConfigForLua(l interface{}, a interface{}) string {
 		location.GlobalRateLimit.Limit,
 		location.GlobalRateLimit.WindowSize,
 		parseComplexNginxVarIntoLuaTable(location.GlobalRateLimit.Key),
+		ignoredCIDRs,
 	)
 }
 
@@ -1522,26 +1529,43 @@ func buildServerName(hostname string) string {
 func parseComplexNginxVarIntoLuaTable(ngxVar string) string {
 	r := regexp.MustCompile(`(\\\$[0-9a-zA-Z_]+)|\$\{([0-9a-zA-Z_]+)\}|\$([0-9a-zA-Z_]+)|(\$|[^$\\]+)`)
 	matches := r.FindAllStringSubmatch(ngxVar, -1)
-	componentsSet := make([][]string, len(matches))
+	components := make([][]string, len(matches))
 	for i, match := range matches {
-		componentsSet[i] = match[1:]
+		components[i] = match[1:]
 	}
 
-	resultSet := "{"
-	for _, components := range componentsSet {
-		result := "{"
-		for _, comp := range components {
-			if len(comp) == 0 {
-				result = result + "nil, "
-			} else {
-				result = result + "\"" + comp + "\", "
-			}
+	luaTable, err := convertGoSliceIntoLuaTable(components, true)
+	if err != nil {
+		klog.Errorf("unexpected error: %v", err)
+		luaTable = "{}"
+	}
+	return luaTable
+}
+
+func convertGoSliceIntoLuaTable(goSliceInterface interface{}, emptyStringAsNil bool) (string, error) {
+	goSlice := reflect.ValueOf(goSliceInterface)
+	kind := goSlice.Kind()
+
+	switch kind {
+	case reflect.String:
+		if emptyStringAsNil && len(goSlice.Interface().(string)) == 0 {
+			return "nil", nil
 		}
-		result += "}, "
-
-		resultSet = resultSet + result
+		return fmt.Sprintf(`"%v"`, goSlice.Interface()), nil
+	case reflect.Int, reflect.Bool:
+		return fmt.Sprintf(`%v`, goSlice.Interface()), nil
+	case reflect.Slice, reflect.Array:
+		luaTable := "{ "
+		for i := 0; i < goSlice.Len(); i++ {
+			luaEl, err := convertGoSliceIntoLuaTable(goSlice.Index(i).Interface(), emptyStringAsNil)
+			if err != nil {
+				return "", err
+			}
+			luaTable = luaTable + luaEl + ", "
+		}
+		luaTable += "}"
+		return luaTable, nil
+	default:
+		return "", fmt.Errorf("could not process type: %s", kind)
 	}
-	resultSet += "}"
-
-	return resultSet
 }

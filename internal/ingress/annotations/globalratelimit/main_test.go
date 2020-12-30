@@ -81,29 +81,75 @@ func TestGlobalRateLimiting(t *testing.T) {
 	annRateLimit := parser.GetAnnotationWithPrefix("global-rate-limit")
 	annRateLimitWindow := parser.GetAnnotationWithPrefix("global-rate-limit-window")
 	annRateLimitKey := parser.GetAnnotationWithPrefix("global-rate-limit-key")
+	annRateLimitIgnoredCIDRs := parser.GetAnnotationWithPrefix("global-rate-limit-ignored-cidrs")
 
 	testCases := []struct {
+		title          string
 		annotations    map[string]string
 		expectedConfig *Config
 		expectedErr    error
 	}{
 		{
+			"no annotation",
 			nil,
 			&Config{},
 			nil,
 		},
 		{
-			map[string]string{annRateLimit: "100", annRateLimitWindow: "2m"},
-			&Config{Namespace: expectedUID, Limit: 100, WindowSize: 120, Key: "$remote_addr"},
+			"minimum required annotations",
+			map[string]string{
+				annRateLimit:       "100",
+				annRateLimitWindow: "2m",
+			},
+			&Config{
+				Namespace:    expectedUID,
+				Limit:        100,
+				WindowSize:   120,
+				Key:          "$remote_addr",
+				IgnoredCIDRs: make([]string, 0),
+			},
 			nil,
 		},
 		{
-			map[string]string{annRateLimit: "100", annRateLimitWindow: "2m", annRateLimitKey: "$http_x_api_user"},
-			&Config{Namespace: expectedUID, Limit: 100, WindowSize: 120, Key: "$http_x_api_user"},
+			"global-rate-limit-key annotation",
+			map[string]string{
+				annRateLimit:       "100",
+				annRateLimitWindow: "2m",
+				annRateLimitKey:    "$http_x_api_user",
+			},
+			&Config{
+				Namespace:    expectedUID,
+				Limit:        100,
+				WindowSize:   120,
+				Key:          "$http_x_api_user",
+				IgnoredCIDRs: make([]string, 0),
+			},
 			nil,
 		},
 		{
-			map[string]string{annRateLimit: "100", annRateLimitWindow: "2mb", annRateLimitKey: "$http_x_api_user"},
+			"global-rate-limit-ignored-cidrs annotation",
+			map[string]string{
+				annRateLimit:             "100",
+				annRateLimitWindow:       "2m",
+				annRateLimitKey:          "$http_x_api_user",
+				annRateLimitIgnoredCIDRs: "127.0.0.1, 200.200.24.0/24",
+			},
+			&Config{
+				Namespace:    expectedUID,
+				Limit:        100,
+				WindowSize:   120,
+				Key:          "$http_x_api_user",
+				IgnoredCIDRs: []string{"127.0.0.1", "200.200.24.0/24"},
+			},
+			nil,
+		},
+		{
+			"incorrect duration for window",
+			map[string]string{
+				annRateLimit:       "100",
+				annRateLimitWindow: "2mb",
+				annRateLimitKey:    "$http_x_api_user",
+			},
 			&Config{},
 			ing_errors.LocationDenied{
 				Reason: errors.Wrap(fmt.Errorf(`time: unknown unit "mb" in duration "2mb"`),
@@ -127,7 +173,7 @@ func TestGlobalRateLimiting(t *testing.T) {
 		if !testCase.expectedConfig.Equal(actualConfig) {
 			expectedJSON, _ := json.Marshal(testCase.expectedConfig)
 			actualJSON, _ := json.Marshal(actualConfig)
-			t.Errorf("expected config '%s' but got '%s'", expectedJSON, actualJSON)
+			t.Errorf("%v: expected config '%s' but got '%s'", testCase.title, expectedJSON, actualJSON)
 		}
 	}
 }

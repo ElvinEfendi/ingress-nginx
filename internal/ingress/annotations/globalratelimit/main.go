@@ -26,16 +26,19 @@ import (
 	"k8s.io/ingress-nginx/internal/ingress/annotations/parser"
 	ing_errors "k8s.io/ingress-nginx/internal/ingress/errors"
 	"k8s.io/ingress-nginx/internal/ingress/resolver"
+	"k8s.io/ingress-nginx/internal/net"
+	"k8s.io/ingress-nginx/internal/sets"
 )
 
 const defaultKey = "$remote_addr"
 
 // Config encapsulates all global rate limit attributes
 type Config struct {
-	Namespace  string `json:"namespace"`
-	Limit      int    `json:"limit"`
-	WindowSize int    `json:"window-size"`
-	Key        string `json:"key"`
+	Namespace    string   `json:"namespace"`
+	Limit        int      `json:"limit"`
+	WindowSize   int      `json:"window-size"`
+	Key          string   `json:"key"`
+	IgnoredCIDRs []string `json:"ignored-cidrs"`
 }
 
 // Equal tests for equality between two Config types
@@ -50,6 +53,9 @@ func (l *Config) Equal(r *Config) bool {
 		return false
 	}
 	if l.Key != r.Key {
+		return false
+	}
+	if len(l.IgnoredCIDRs) != len(r.IgnoredCIDRs) || !sets.StringElementsMatch(l.IgnoredCIDRs, r.IgnoredCIDRs) {
 		return false
 	}
 
@@ -89,10 +95,17 @@ func (a globalratelimit) Parse(ing *networking.Ingress) (interface{}, error) {
 		key = defaultKey
 	}
 
+	rawIgnoredCIDRs, _ := parser.GetStringAnnotation("global-rate-limit-ignored-cidrs", ing)
+	ignoredCIDRs, err := net.ParseCIDRs(rawIgnoredCIDRs)
+	if err != nil {
+		return nil, err
+	}
+
 	config.Namespace = strings.Replace(string(ing.UID), "-", "", -1)
 	config.Limit = limit
 	config.WindowSize = int(windowSize.Seconds())
 	config.Key = key
+	config.IgnoredCIDRs = ignoredCIDRs
 
 	return config, nil
 }
