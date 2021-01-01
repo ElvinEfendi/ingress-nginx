@@ -327,7 +327,7 @@ func (f *Framework) SetNginxConfigMapData(cmData map[string]string) {
 		assert.Nil(ginkgo.GinkgoT(), err, "updating configuration configmap")
 	}
 
-	f.waitForReload(fn)
+	f.WaitForReload(fn)
 }
 
 // CreateConfigMap creates a new configmap in the current namespace
@@ -358,10 +358,12 @@ func (f *Framework) UpdateNginxConfigMapData(key string, value string) {
 		assert.Nil(ginkgo.GinkgoT(), err, "updating configuration configmap")
 	}
 
-	f.waitForReload(fn)
+	f.WaitForReload(fn)
 }
 
-func (f *Framework) waitForReload(fn func()) {
+// WaitForReload calls the passed function and
+// asser it has caused at least 1 reload.
+func (f *Framework) WaitForReload(fn func()) {
 	initialReloadCount := getReloadCount(f.pod, f.Namespace, f.KubeClientSet)
 
 	fn()

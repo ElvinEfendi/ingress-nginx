@@ -18,15 +18,16 @@ package annotations
 
 import (
 	"fmt"
-	"strings"
+	"net/http"
 
 	"github.com/onsi/ginkgo"
+	"github.com/stretchr/testify/assert"
 
 	"k8s.io/ingress-nginx/test/e2e/framework"
 )
 
-var _ = framework.DescribeAnnotation("global-rate-limit", func() {
-	f := framework.NewDefaultFramework("global-rate-limit-annotation")
+var _ = framework.DescribeAnnotation("annotation-global-rate-limit", func() {
+	f := framework.NewDefaultFramework("global-rate-limit")
 	host := "global-rate-limit-annotation"
 
 	ginkgo.BeforeEach(func() {
@@ -38,23 +39,43 @@ var _ = framework.DescribeAnnotation("global-rate-limit", func() {
 		annotations["nginx.ingress.kubernetes.io/global-rate-limit"] = "5"
 		annotations["nginx.ingress.kubernetes.io/global-rate-limit-window"] = "2m"
 
-		ing := framework.NewSingleIngress(host, "/", host, f.Namespace, framework.EchoService,
-			80, annotations)
+		ing := framework.NewSingleIngress(host, "/", host, f.Namespace, framework.EchoService, 80, annotations)
 		f.EnsureIngress(ing)
+
+		serverConfig := ""
 		f.WaitForNginxServer(host, func(server string) bool {
-			return strings.Contains(server, fmt.Sprintf(`global_throttle = { namespace = "%v", limit = 5, `+
-				`window_size = 120, key = { { nil, nil, "remote_addr", nil, }, }, ignored_cidrs = { } }`, ing.UID))
+			serverConfig = server
+			return true
 		})
+		assert.Contains(ginkgo.GinkgoT(), serverConfig,
+			fmt.Sprintf(`global_throttle = { namespace = "%v", `+
+				`limit = 5, window_size = 120, key = { { nil, nil, "remote_addr", nil, }, }, `+
+				`ignored_cidrs = { } }`,
+				ing.UID))
+
+		f.HTTPTestClient().GET("/").WithHeader("Host", host).Expect().Status(http.StatusOK)
 
 		ginkgo.By("regenerating the correct configuration after update")
 		annotations["nginx.ingress.kubernetes.io/global-rate-limit-key"] = "${remote_addr}${http_x_api_client}"
 		annotations["nginx.ingress.kubernetes.io/global-rate-limit-ignored-cidrs"] = "192.168.1.1, 234.234.234.0/24"
 		ing.SetAnnotations(annotations)
-		f.UpdateIngress(ing)
-		f.WaitForNginxServer(host, func(server string) bool {
-			return strings.Contains(server, fmt.Sprintf(`global_throttle = { namespace = "%v", limit = 5, `+
-				`window_size = 120, key = { { nil, "remote_addr", nil, nil, }, { nil, "http_x_api_client", nil, nil, }, }`+
-				`, ignored_cidrs = { "192.168.1.1", "234.234.234.0/24", } }`, ing.UID))
+
+		f.WaitForReload(func() {
+			f.UpdateIngress(ing)
 		})
+
+		serverConfig = ""
+		f.WaitForNginxServer(host, func(server string) bool {
+			serverConfig = server
+			return true
+		})
+		assert.Contains(ginkgo.GinkgoT(), serverConfig,
+			fmt.Sprintf(`global_throttle = { namespace = "%v", `+
+				`limit = 5, window_size = 120, `+
+				`key = { { nil, "remote_addr", nil, nil, }, { nil, "http_x_api_client", nil, nil, }, }, `+
+				`ignored_cidrs = { "192.168.1.1", "234.234.234.0/24", } }`,
+				ing.UID))
+
+		f.HTTPTestClient().GET("/").WithHeader("Host", host).Expect().Status(http.StatusOK)
 	})
 })
