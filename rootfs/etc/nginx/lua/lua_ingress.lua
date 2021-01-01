@@ -162,7 +162,7 @@ function _M.rewrite(location_config)
     return ngx_redirect(uri, config.http_redirect_code)
   end
 
-  global_throttle.throttle(config, location_config)
+  global_throttle.throttle(config.global_throttle, location_config.global_throttle)
 end
 
 function _M.header()

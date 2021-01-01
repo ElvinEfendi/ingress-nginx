@@ -290,7 +290,12 @@ func configForLua(input interface{}) string {
 		hsts_include_subdomains = %t,
 		hsts_preload = %t,
 
-		memcached = { host = "%v", port = %d, connect_timeout = %d, max_idle_timeout = %d, pool_size = %d },
+		global_throttle = {
+			memcached = {
+				host = "%v", port = %d, connect_timeout = %d, max_idle_timeout = %d, pool_size = %d,
+			},
+			status_code = %d,
+		}
 	}`,
 		all.Cfg.UseForwardedHeaders,
 		all.Cfg.UseProxyProtocol,
@@ -304,11 +309,12 @@ func configForLua(input interface{}) string {
 		all.Cfg.HSTSIncludeSubdomains,
 		all.Cfg.HSTSPreload,
 
-		all.Cfg.MemcachedHost,
-		all.Cfg.MemcachedPort,
-		all.Cfg.MemcachedConnectTimeout,
-		all.Cfg.MemcachedMaxIdleTimeout,
-		all.Cfg.MemcachedPoolSize,
+		all.Cfg.GlobalRateLimitMemcachedHost,
+		all.Cfg.GlobalRateLimitMemcachedPort,
+		all.Cfg.GlobalRateLimitMemcachedConnectTimeout,
+		all.Cfg.GlobalRateLimitMemcachedMaxIdleTimeout,
+		all.Cfg.GlobalRateLimitMemcachedPoolSize,
+		all.Cfg.GlobalRateLimitStatucCode,
 	)
 }
 

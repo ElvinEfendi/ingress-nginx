@@ -6,7 +6,6 @@ local ngx_exit = ngx.exit
 local ngx_log = ngx.log
 local ngx_ERR = ngx.ERR
 local ngx_INFO = ngx.INFO
-local ngx_HTTP_TOO_MANY_REQUESTS = ngx.HTTP_TOO_MANY_REQUESTS
 
 local _M = {}
 
@@ -23,10 +22,13 @@ local function is_enabled(config, location_config)
   if config.memcached.host == "" or config.memcached.port == 0 then
     return false
   end
-  if location_config.global_throttle.limit == 0 or
-    location_config.global_throttle.window_size == 0 then
+  if location_config.limit == 0 or
+    location_config.window_size == 0 then
     return false
   end
+
+  -- TODO: also check if remote_addr is ignored in location_config.global_throttle.ignored_cidrs
+
   return true
 end
 
@@ -39,24 +41,24 @@ function _M.throttle(config, location_config)
     return
   end
 
-  local key_value = util.generate_var_value(location_config.global_throttle.key)
+  local key_value = util.generate_var_value(location_config.key)
   if not key_value or key_value == "" then
     key_value = ngx.var[DEFAULT_RAW_KEY]
   end
 
   local namespaced_key_value =
-    get_namespaced_key_value(location_config.global_throttle.namespace, key_value)
+    get_namespaced_key_value(location_config.namespace, key_value)
 
   local is_limit_exceeding = DECISION_CACHE:get(namespaced_key_value)
   if is_limit_exceeding then
     ngx.var.global_rate_limit_exceeding = "c"
-    return ngx_exit(ngx_HTTP_TOO_MANY_REQUESTS)
+    return ngx_exit(config.status_code)
   end
 
   local my_throttle, err = resty_global_throttle.new(
-    location_config.global_throttle.namespace,
-    location_config.global_throttle.limit,
-    location_config.global_throttle.window_size,
+    location_config.namespace,
+    location_config.limit,
+    location_config.window_size,
     {
       provider = "memcached",
       host = config.memcached.host,
@@ -94,10 +96,10 @@ function _M.throttle(config, location_config)
 
     ngx.var.global_rate_limit_exceeding = "y"
     ngx_log(ngx_INFO, "limit is exceeding for ",
-      location_config.global_throttle.namespace, "/", key_value,
+      location_config.namespace, "/", key_value,
       " with estimated_final_count: ", estimated_final_count)
 
-    return ngx_exit(ngx_HTTP_TOO_MANY_REQUESTS)
+    return ngx_exit(config.status_code)
   end
 end
 

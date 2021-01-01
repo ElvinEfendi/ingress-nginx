@@ -8,7 +8,7 @@ local function assert_request_rejected(config, location_config, opts)
     global_throttle.throttle(config, location_config)
   end)
 
-  assert.stub(ngx.exit).was_called_with(ngx.HTTP_TOO_MANY_REQUESTS)
+  assert.stub(ngx.exit).was_called_with(config.status_code)
   if opts.with_cache then
     assert.are.same("c", ngx.var.global_rate_limit_exceeding)
   else
@@ -66,23 +66,35 @@ local function stub_resty_global_throttle_process(ret1, ret2, ret3, f)
   assert.stub(resty_global_throttle.new).was_called()
 end
 
+local function cache_rejection_decision(namespace, key_value, desired_delay)
+  local namespaced_key_value = namespace .. key_value
+  local ok, err = ngx.shared.global_throttle_cache:safe_add(namespaced_key_value, true, desired_delay)
+  assert.is_nil(err)
+  assert.is_true(ok)
+end
+
 describe("global_throttle", function()
+  local snapshot
+
   local NAMESPACE = "31285d47b1504dcfbd6f12c46d769f6e"
-  local LOCATION_CONFIG = {
-    global_throttle = { namespace = NAMESPACE, limit = 10, window_size = 60, key = nil }
-  }
+  local LOCATION_CONFIG = { namespace = NAMESPACE, limit = 10, window_size = 60, key = nil }
   local CONFIG = {
     memcached = {
       host = "memc.default.svc.cluster.local", port = 11211,
       connect_timeout = 50, max_idle_timeout = 10000, pool_size = 50,
-    }
+    },
+    status_code = 429,
   }
 
   before_each(function()
+    snapshot = assert:snapshot()
+
     ngx.var = { remote_addr = "127.0.0.1", global_rate_limit_exceeding = nil }
   end)
 
   after_each(function()
+    snapshot:revert()
+
     ngx.shared.global_throttle_cache:flush_all()
     reset_ngx()
   end)
@@ -100,7 +112,7 @@ describe("global_throttle", function()
     assert_short_circuits(function()
       local global_throttle = require_without_cache("global_throttle")
       local location_config_copy = util.deepcopy(LOCATION_CONFIG)
-      location_config_copy.global_throttle.limit = 0
+      location_config_copy.limit = 0
       assert.has_no.errors(function()
         global_throttle.throttle(CONFIG, location_config_copy)
       end)
@@ -109,7 +121,7 @@ describe("global_throttle", function()
     assert_short_circuits(function()
       local global_throttle = require_without_cache("global_throttle")
       local location_config_copy = util.deepcopy(LOCATION_CONFIG)
-      location_config_copy.global_throttle.window_size = 0
+      location_config_copy.window_size = 0
       assert.has_no.errors(function()
         global_throttle.throttle(CONFIG, location_config_copy)
       end)
@@ -119,13 +131,10 @@ describe("global_throttle", function()
   describe("when exceeding limit has already been cached", function()
     local key_value = "foo"
     local location_config = util.deepcopy(LOCATION_CONFIG)
-    location_config.global_throttle.key = { { nil, nil, nil, key_value } }
+    location_config.key = { { nil, nil, nil, key_value } }
 
     before_each(function()
-      local namespaced_key_value = NAMESPACE .. key_value
-      local ok, err = ngx.shared.global_throttle_cache:safe_add(namespaced_key_value, true, 0.5)
-      assert.is_true(ok)
-      assert.is_nil(err)
+      cache_rejection_decision(NAMESPACE, key_value, 0.5)
     end)
 
     it("uses namespaced key to access decision cache", function()
@@ -147,7 +156,7 @@ describe("global_throttle", function()
       end
 
       local location_config = util.deepcopy(LOCATION_CONFIG)
-      location_config.global_throttle.namespace = too_long_namespace
+      location_config.namespace = too_long_namespace
 
       assert_fails_open(CONFIG, location_config, "faled to initialize resty_global_throttle: ", "'namespace' can be at most 35 characters")
     end)
@@ -169,7 +178,7 @@ describe("global_throttle", function()
       end
       o.process = function(self, key) return 1, nil, nil end
 
-      local expected = LOCATION_CONFIG.global_throttle
+      local expected = LOCATION_CONFIG
       assert.are.same(expected.namespace, namespace)
       assert.are.same(expected.limit, limit)
       assert.are.same(expected.window_size, window_size)
@@ -197,10 +206,10 @@ describe("global_throttle", function()
   it("rejects request and caches decision when limit is exceeding after processing a key", function()
     local desired_delay = 0.015
 
-    stub_resty_global_throttle_process(LOCATION_CONFIG.global_throttle.limit + 1, desired_delay, nil, function()
+    stub_resty_global_throttle_process(LOCATION_CONFIG.limit + 1, desired_delay, nil, function()
       assert_request_rejected(CONFIG, LOCATION_CONFIG, { with_cache = false })
 
-      local cache_key = LOCATION_CONFIG.global_throttle.namespace .. ngx.var.remote_addr
+      local cache_key = LOCATION_CONFIG.namespace .. ngx.var.remote_addr
       assert.is_true(ngx.shared.global_throttle_cache:get(cache_key))
 
       -- we assume it won't take more than this  after caching
@@ -215,19 +224,26 @@ describe("global_throttle", function()
   it("rejects request and skip caching of decision when limit is exceeding after processing a key but desired delay is lower than the threshold", function()
     local desired_delay = 0.0009
 
-    stub_resty_global_throttle_process(LOCATION_CONFIG.global_throttle.limit, desired_delay, nil, function()
+    stub_resty_global_throttle_process(LOCATION_CONFIG.limit, desired_delay, nil, function()
       assert_request_rejected(CONFIG, LOCATION_CONFIG, { with_cache = false })
 
-      local cache_key = LOCATION_CONFIG.global_throttle.namespace .. ngx.var.remote_addr
+      local cache_key = LOCATION_CONFIG.namespace .. ngx.var.remote_addr
       assert.is_nil(ngx.shared.global_throttle_cache:get(cache_key))
     end)
   end)
 
   it("allows the request when limit is not exceeding after processing a key", function()
-    stub_resty_global_throttle_process(LOCATION_CONFIG.global_throttle.limit - 3, nil, nil,
+    stub_resty_global_throttle_process(LOCATION_CONFIG.limit - 3, nil, nil,
       function()
         assert_request_not_rejected(CONFIG, LOCATION_CONFIG)
       end
     )
+  end)
+
+  it("rejects with custom status code", function()
+    cache_rejection_decision(NAMESPACE, ngx.var.remote_addr, 0.3)
+    local config = util.deepcopy(CONFIG)
+    config.status_code = 503
+    assert_request_rejected(config, LOCATION_CONFIG, { with_cache = true })
   end)
 end)

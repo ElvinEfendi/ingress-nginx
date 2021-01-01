@@ -709,24 +709,30 @@ type Configuration struct {
 	// Default: text/html
 	DefaultType string `json:"default-type"`
 
-	// MemcachedHost configures memcached host
-	MemcachedHost string `json:"memcached-host"`
+	// GlobalRateLimitMemcachedHost configures memcached host.
+	GlobalRateLimitMemcachedHost string `json:"global-rate-limit-memcached-host"`
 
-	// MemcachedPort configures memcached port
-	MemcachedPort int `json:"memcached-port"`
+	// GlobalRateLimitMemcachedPort configures memcached port.
+	GlobalRateLimitMemcachedPort int `json:"global-rate-limit-memcached-port"`
 
-	// MemcachedConnectTimeout configures timeout when connecting to memcached
+	// GlobalRateLimitMemcachedConnectTimeout configures timeout when connecting to memcached.
 	// The unit is millisecond.
-	MemcachedConnectTimeout int `json:"memcached-connect-timeout"`
+	GlobalRateLimitMemcachedConnectTimeout int `json:"global-rate-limit-memcached-connect-timeout"`
 
-	// MemcachedMaxIdleTimeout configured how long connections should be kept alive in idle state
-	// The unit is millisecond.
-	MemcachedMaxIdleTimeout int `json:"memcached-max-idle-timeout"`
+	// GlobalRateLimitMemcachedMaxIdleTimeout configured how long connections
+	// should be kept alive in idle state. The unit is millisecond.
+	GlobalRateLimitMemcachedMaxIdleTimeout int `json:"global-rate-limit-memcached-max-idle-timeout"`
 
-	// MemcachedPoolSize configures how many connections should be kept alive in the pool
+	// GlobalRateLimitMemcachedPoolSize configures how many connections
+	// should be kept alive in the pool.
 	// Note that this is per NGINX worker. Make sure your memcached server can
-	// handle `MemcachedPoolSize * <nginx worker count> * <nginx replica count>` simultaneous connections.
-	MemcachedPoolSize int `json:"memcached-pool-size"`
+	// handle `MemcachedPoolSize * <nginx worker count> * <nginx replica count>`
+	// simultaneous connections.
+	GlobalRateLimitMemcachedPoolSize int `json:"global-rate-limit-memcached-pool-size"`
+
+	// GlobalRateLimitStatucCode determines the HTTP status code to return
+	// when limit is exceeding during global rate limiting.
+	GlobalRateLimitStatucCode int `json:"global-rate-limit-status-code"`
 }
 
 // NewDefault returns the default nginx configuration
@@ -848,38 +854,39 @@ func NewDefault() Configuration {
 			ProxyHTTPVersion:         "1.1",
 			ProxyMaxTempFileSize:     "1024m",
 		},
-		UpstreamKeepaliveConnections: 320,
-		UpstreamKeepaliveTimeout:     60,
-		UpstreamKeepaliveRequests:    10000,
-		LimitConnZoneVariable:        defaultLimitConnZoneVariable,
-		BindAddressIpv4:              defBindAddress,
-		BindAddressIpv6:              defBindAddress,
-		ZipkinCollectorPort:          9411,
-		ZipkinServiceName:            "nginx",
-		ZipkinSampleRate:             1.0,
-		JaegerCollectorPort:          6831,
-		JaegerServiceName:            "nginx",
-		JaegerSamplerType:            "const",
-		JaegerSamplerParam:           "1",
-		JaegerSamplerPort:            5778,
-		JaegerSamplerHost:            "http://127.0.0.1",
-		DatadogServiceName:           "nginx",
-		DatadogEnvironment:           "prod",
-		DatadogCollectorPort:         8126,
-		DatadogOperationNameOverride: "nginx.handle",
-		DatadogSampleRate:            1.0,
-		DatadogPrioritySampling:      true,
-		LimitReqStatusCode:           503,
-		LimitConnStatusCode:          503,
-		SyslogPort:                   514,
-		NoTLSRedirectLocations:       "/.well-known/acme-challenge",
-		NoAuthLocations:              "/.well-known/acme-challenge",
-		GlobalExternalAuth:           defGlobalExternalAuth,
-		ProxySSLLocationOnly:         false,
-		DefaultType:                  "text/html",
-		MemcachedConnectTimeout:      50,
-		MemcachedMaxIdleTimeout:      10000,
-		MemcachedPoolSize:            50,
+		UpstreamKeepaliveConnections:           320,
+		UpstreamKeepaliveTimeout:               60,
+		UpstreamKeepaliveRequests:              10000,
+		LimitConnZoneVariable:                  defaultLimitConnZoneVariable,
+		BindAddressIpv4:                        defBindAddress,
+		BindAddressIpv6:                        defBindAddress,
+		ZipkinCollectorPort:                    9411,
+		ZipkinServiceName:                      "nginx",
+		ZipkinSampleRate:                       1.0,
+		JaegerCollectorPort:                    6831,
+		JaegerServiceName:                      "nginx",
+		JaegerSamplerType:                      "const",
+		JaegerSamplerParam:                     "1",
+		JaegerSamplerPort:                      5778,
+		JaegerSamplerHost:                      "http://127.0.0.1",
+		DatadogServiceName:                     "nginx",
+		DatadogEnvironment:                     "prod",
+		DatadogCollectorPort:                   8126,
+		DatadogOperationNameOverride:           "nginx.handle",
+		DatadogSampleRate:                      1.0,
+		DatadogPrioritySampling:                true,
+		LimitReqStatusCode:                     503,
+		LimitConnStatusCode:                    503,
+		SyslogPort:                             514,
+		NoTLSRedirectLocations:                 "/.well-known/acme-challenge",
+		NoAuthLocations:                        "/.well-known/acme-challenge",
+		GlobalExternalAuth:                     defGlobalExternalAuth,
+		ProxySSLLocationOnly:                   false,
+		DefaultType:                            "text/html",
+		GlobalRateLimitMemcachedConnectTimeout: 50,
+		GlobalRateLimitMemcachedMaxIdleTimeout: 10000,
+		GlobalRateLimitMemcachedPoolSize:       50,
+		GlobalRateLimitStatucCode:              429,
 	}
 
 	if klog.V(5).Enabled() {

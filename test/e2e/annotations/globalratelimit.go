@@ -43,16 +43,18 @@ var _ = framework.DescribeAnnotation("global-rate-limit", func() {
 		f.EnsureIngress(ing)
 		f.WaitForNginxServer(host, func(server string) bool {
 			return strings.Contains(server, fmt.Sprintf(`global_throttle = { namespace = "%v", limit = 5, `+
-				`window_size = 120, key = {{nil, nil, "remote_addr", nil, }, } }`, ing.UID))
+				`window_size = 120, key = { { nil, nil, "remote_addr", nil, }, }, ignored_cidrs = { } }`, ing.UID))
 		})
 
 		ginkgo.By("regenerating the correct configuration after update")
-		annotations["nginx.ingress.kubernetes.io/global-rate-key"] = "${remote_addr}${http_x_api_client}"
+		annotations["nginx.ingress.kubernetes.io/global-rate-limit-key"] = "${remote_addr}${http_x_api_client}"
+		annotations["nginx.ingress.kubernetes.io/global-rate-limit-ignored-cidrs"] = "192.168.1.1, 234.234.234.0/24"
 		ing.SetAnnotations(annotations)
 		f.UpdateIngress(ing)
 		f.WaitForNginxServer(host, func(server string) bool {
 			return strings.Contains(server, fmt.Sprintf(`global_throttle = { namespace = "%v", limit = 5, `+
-				`window_size = 120, key = {{nil, "remote_addr", nil, nil, }, {nil, "http_x_api_client", nil, nil, }, } }`, ing.UID))
+				`window_size = 120, key = { { nil, "remote_addr", nil, nil, }, { nil, "http_x_api_client", nil, nil, }, }`+
+				`, ignored_cidrs = { "192.168.1.1", "234.234.234.0/24", } }`, ing.UID))
 		})
 	})
 })

@@ -23,12 +23,13 @@ import (
 	"strings"
 
 	"github.com/onsi/ginkgo"
+	"github.com/stretchr/testify/assert"
 	"k8s.io/ingress-nginx/test/e2e/framework"
 )
 
-var _ = framework.DescribeSetting("memcached", func() {
-	f := framework.NewDefaultFramework("memcached")
-	host := "memcached"
+var _ = framework.DescribeSetting("settings-global-rate-limit", func() {
+	f := framework.NewDefaultFramework("global-rate-limit")
+	host := "global-rate-limit"
 
 	ginkgo.BeforeEach(func() {
 		f.NewEchoDeployment()
@@ -41,11 +42,19 @@ var _ = framework.DescribeSetting("memcached", func() {
 
 		ginkgo.By("generating correct defaults")
 
+		ngxCfg := ""
 		f.WaitForNginxConfiguration(func(cfg string) bool {
-			return strings.Contains(cfg,
-				fmt.Sprintf(`memcached = { host = "%v", port = %d, connect_timeout = %d, max_idle_timeout = %d, pool_size = %d }`,
-					"", 0, 50, 10000, 50))
+			if strings.Contains(cfg, "global_throttle") {
+				ngxCfg = cfg
+				return true
+			}
+			return false
 		})
+
+		assert.Contains(ginkgo.GinkgoT(), ngxCfg, fmt.Sprintf(`global_throttle = { `+
+			`memcached = { host = "%v", port = %d, connect_timeout = %d, max_idle_timeout = %d, `+
+			`pool_size = %d, }, status_code = %d, }`,
+			"", 0, 50, 10000, 50, 429))
 
 		f.HTTPTestClient().GET("/").WithHeader("Host", host).Expect().Status(http.StatusOK)
 
@@ -56,20 +65,31 @@ var _ = framework.DescribeSetting("memcached", func() {
 		memcachedConnectTimeout := 100
 		memcachedMaxIdleTimeout := 5000
 		memcachedPoolSize := 100
+		statusCode := 503
 
 		f.SetNginxConfigMapData(map[string]string{
-			"memcached-host":             memcachedHost,
-			"memcached-port":             strconv.Itoa(memcachedPort),
-			"memcached-connect-timeout":  strconv.Itoa(memcachedConnectTimeout),
-			"memcached-max-idle-timeout": strconv.Itoa(memcachedMaxIdleTimeout),
-			"memcached-pool-size":        strconv.Itoa(memcachedPoolSize),
+			"global-rate-limit-memcached-host":             memcachedHost,
+			"global-rate-limit-memcached-port":             strconv.Itoa(memcachedPort),
+			"global-rate-limit-memcached-connect-timeout":  strconv.Itoa(memcachedConnectTimeout),
+			"global-rate-limit-memcached-max-idle-timeout": strconv.Itoa(memcachedMaxIdleTimeout),
+			"global-rate-limit-memcached-pool-size":        strconv.Itoa(memcachedPoolSize),
+			"global-rate-limit-status-code":                strconv.Itoa(statusCode),
 		})
 
+		ngxCfg = ""
 		f.WaitForNginxConfiguration(func(cfg string) bool {
-			return strings.Contains(cfg,
-				fmt.Sprintf(`memcached = { host = "%v", port = %d, connect_timeout = %d, max_idle_timeout = %d, pool_size = %d }`,
-					memcachedHost, memcachedPort, memcachedConnectTimeout, memcachedMaxIdleTimeout, memcachedPoolSize))
+			if strings.Contains(cfg, "global_throttle") {
+				ngxCfg = cfg
+				return true
+			}
+			return false
 		})
+
+		assert.Contains(ginkgo.GinkgoT(), ngxCfg, fmt.Sprintf(`global_throttle = { `+
+			`memcached = { host = "%v", port = %d, connect_timeout = %d, max_idle_timeout = %d, `+
+			`pool_size = %d, }, status_code = %d, }`,
+			memcachedHost, memcachedPort, memcachedConnectTimeout, memcachedMaxIdleTimeout,
+			memcachedPoolSize, statusCode))
 
 		f.HTTPTestClient().GET("/").WithHeader("Host", host).Expect().Status(http.StatusOK)
 	})

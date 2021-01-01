@@ -35,7 +35,7 @@ cleanup() {
     --name ${KIND_CLUSTER_NAME}
 }
 
-trap cleanup EXIT
+#trap cleanup EXIT
 
 export KIND_CLUSTER_NAME=${KIND_CLUSTER_NAME:-ingress-nginx-dev}
 
@@ -77,7 +77,7 @@ if [ "${SKIP_IMAGE_CREATION:-false}" = "false" ]; then
   fi
 
   echo "[dev-env] building image"
-  make -C ${DIR}/../../ clean-image build image
+  #make -C ${DIR}/../../ clean-image build image
   make -C ${DIR}/../e2e-image image
 fi
 
