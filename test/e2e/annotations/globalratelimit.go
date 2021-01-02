@@ -19,6 +19,7 @@ package annotations
 import (
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/onsi/ginkgo"
 	"github.com/stretchr/testify/assert"
@@ -40,7 +41,8 @@ var _ = framework.DescribeAnnotation("annotation-global-rate-limit", func() {
 		annotations["nginx.ingress.kubernetes.io/global-rate-limit-window"] = "2m"
 
 		ing := framework.NewSingleIngress(host, "/", host, f.Namespace, framework.EchoService, 80, annotations)
-		f.EnsureIngress(ing)
+		ing = f.EnsureIngress(ing)
+		namespace := strings.Replace(string(ing.UID), "-", "", -1)
 
 		serverConfig := ""
 		f.WaitForNginxServer(host, func(server string) bool {
@@ -51,7 +53,7 @@ var _ = framework.DescribeAnnotation("annotation-global-rate-limit", func() {
 			fmt.Sprintf(`global_throttle = { namespace = "%v", `+
 				`limit = 5, window_size = 120, key = { { nil, nil, "remote_addr", nil, }, }, `+
 				`ignored_cidrs = { } }`,
-				ing.UID))
+				namespace))
 
 		f.HTTPTestClient().GET("/").WithHeader("Host", host).Expect().Status(http.StatusOK)
 
@@ -61,7 +63,7 @@ var _ = framework.DescribeAnnotation("annotation-global-rate-limit", func() {
 		ing.SetAnnotations(annotations)
 
 		f.WaitForReload(func() {
-			f.UpdateIngress(ing)
+			ing = f.UpdateIngress(ing)
 		})
 
 		serverConfig = ""
@@ -74,7 +76,7 @@ var _ = framework.DescribeAnnotation("annotation-global-rate-limit", func() {
 				`limit = 5, window_size = 120, `+
 				`key = { { nil, "remote_addr", nil, nil, }, { nil, "http_x_api_client", nil, nil, }, }, `+
 				`ignored_cidrs = { "192.168.1.1", "234.234.234.0/24", } }`,
-				ing.UID))
+				namespace))
 
 		f.HTTPTestClient().GET("/").WithHeader("Host", host).Expect().Status(http.StatusOK)
 	})
