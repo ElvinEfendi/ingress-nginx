@@ -192,11 +192,12 @@ The following table shows a configuration option's name, type, and the default v
 |[block-referers](#block-referers)|[]string|""|
 |[proxy-ssl-location-only](#proxy-ssl-location-only)|bool|"false"|
 |[default-type](#default-type)|string|"text/html"|
-|[memcached-host](#memcached)|string|""|
-|[memcached-port](#memcached)|int|0|
-|[memcached-connect-timeout](#memcached)|int|50|
-|[memcached-max-idle-timeout](#memcached)|int|10000|
-|[memcached-pool-size](#memcached)|int|50|
+|[global-rate-limit-memcached-host](#global-rate-limit)|string|""|
+|[global-rate-limit-memcached-port](#global-rate-limit)|int|0|
+|[global-rate-limit-memcached-connect-timeout](#global-rate-limit)|int|50|
+|[global-rate-limit-memcached-max-idle-timeout](#global-rate-limit)|int|10000|
+|[global-rate-limit-memcached-pool-size](#global-rate-limit)|int|50|
+|[global-rate-limit-status-code](#global-rate-limit)|int|429|
 
 ## add-headers
 
@@ -1158,16 +1159,18 @@ _**default:**_ text/html
 _References:_
 [http://nginx.org/en/docs/http/ngx_http_core_module.html#default_type](http://nginx.org/en/docs/http/ngx_http_core_module.html#default_type)
 
-## memcached
+## global-rate-limit
+
+* `global-rate-limit-status-code`: Configure return HTTP status code for when limit is exceeding.
 
 Configure `memcached` client for [Global Rate Limiting](https://github.com/kubernetes/ingress-nginx/blob/master/docs/user-guide/nginx-configuration/annotations.md#global-rate-limiting).
 
-* `memcached-host`: IP/FQDN of memcached server to use. Required to enable Global Rate Limiting.
-* `memcached-port`: port of memcached server to use. Required to enable Global Rate Limiting.
-* `memcached-connect-timeout`: configure timeout for connect, send and receive operations. Unit is millisecond. Defaults to 50ms.
-* `memcached-max-idle-timeout`: configure timeout for cleaning idle connections. Unit is millisecond. Defaults to 50ms. 
-* `memcached-pool-size`: configure number of max connections to keep alive. Make sure your `memcached` server can handle
-`memcached-pool-size * worker-processes * <number of ingress-nginx replicas>` simultaneous connections.
+* `global-rate-limit-memcached-host`: IP/FQDN of memcached server to use. Required to enable Global Rate Limiting.
+* `global-rate-limit-memcached-port`: port of memcached server to use. Required to enable Global Rate Limiting.
+* `global-rate-limit-memcached-connect-timeout`: configure timeout for connect, send and receive operations. Unit is millisecond. Defaults to 50ms.
+* `global-rate-limit-memcached-max-idle-timeout`: configure timeout for cleaning idle connections. Unit is millisecond. Defaults to 50ms. 
+* `global-rate-limit-memcached-pool-size`: configure number of max connections to keep alive. Make sure your `memcached` server can handle
+`global-rate-limit-memcached-pool-size * worker-processes * <number of ingress-nginx replicas>` simultaneous connections.
 
 These settings get used by [lua-resty-global-throttle](https://github.com/ElvinEfendi/lua-resty-global-throttle)
 that ingress-nginx includes. Refer to the link to learn more about `lua-resty-global-throttle`.
