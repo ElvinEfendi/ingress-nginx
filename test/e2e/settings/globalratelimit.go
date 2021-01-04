@@ -54,7 +54,7 @@ var _ = framework.DescribeSetting("settings-global-rate-limit", func() {
 		assert.Contains(ginkgo.GinkgoT(), ngxCfg, fmt.Sprintf(`global_throttle = { `+
 			`memcached = { host = "%v", port = %d, connect_timeout = %d, max_idle_timeout = %d, `+
 			`pool_size = %d, }, status_code = %d, }`,
-			"", 0, 50, 10000, 50, 429))
+			"", 11211, 50, 10000, 50, 429))
 
 		f.HTTPTestClient().GET("/").WithHeader("Host", host).Expect().Status(http.StatusOK)
 

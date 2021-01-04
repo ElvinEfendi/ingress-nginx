@@ -883,6 +883,7 @@ func NewDefault() Configuration {
 		GlobalExternalAuth:                     defGlobalExternalAuth,
 		ProxySSLLocationOnly:                   false,
 		DefaultType:                            "text/html",
+		GlobalRateLimitMemcachedPort:           11211,
 		GlobalRateLimitMemcachedConnectTimeout: 50,
 		GlobalRateLimitMemcachedMaxIdleTimeout: 10000,
 		GlobalRateLimitMemcachedPoolSize:       50,

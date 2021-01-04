@@ -193,7 +193,7 @@ The following table shows a configuration option's name, type, and the default v
 |[proxy-ssl-location-only](#proxy-ssl-location-only)|bool|"false"|
 |[default-type](#default-type)|string|"text/html"|
 |[global-rate-limit-memcached-host](#global-rate-limit)|string|""|
-|[global-rate-limit-memcached-port](#global-rate-limit)|int|0|
+|[global-rate-limit-memcached-port](#global-rate-limit)|int|11211|
 |[global-rate-limit-memcached-connect-timeout](#global-rate-limit)|int|50|
 |[global-rate-limit-memcached-max-idle-timeout](#global-rate-limit)|int|10000|
 |[global-rate-limit-memcached-pool-size](#global-rate-limit)|int|50|
@@ -1166,7 +1166,7 @@ _References:_
 Configure `memcached` client for [Global Rate Limiting](https://github.com/kubernetes/ingress-nginx/blob/master/docs/user-guide/nginx-configuration/annotations.md#global-rate-limiting).
 
 * `global-rate-limit-memcached-host`: IP/FQDN of memcached server to use. Required to enable Global Rate Limiting.
-* `global-rate-limit-memcached-port`: port of memcached server to use. Required to enable Global Rate Limiting.
+* `global-rate-limit-memcached-port`: port of memcached server to use. Defaults default memcached port of `11211`.
 * `global-rate-limit-memcached-connect-timeout`: configure timeout for connect, send and receive operations. Unit is millisecond. Defaults to 50ms.
 * `global-rate-limit-memcached-max-idle-timeout`: configure timeout for cleaning idle connections. Unit is millisecond. Defaults to 50ms. 
 * `global-rate-limit-memcached-pool-size`: configure number of max connections to keep alive. Make sure your `memcached` server can handle
