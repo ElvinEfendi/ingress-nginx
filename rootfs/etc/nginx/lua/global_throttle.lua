@@ -1,4 +1,5 @@
 local resty_global_throttle = require("resty.global_throttle")
+local resty_ipmatcher = require("resty.ipmatcher")
 local util = require("util")
 
 local ngx = ngx
@@ -18,6 +19,28 @@ local CACHE_THRESHOLD = 0.001
 
 local DEFAULT_RAW_KEY = "remote_addr"
 
+local function should_ignore_request(ignored_cidrs)
+  if not ignored_cidrs or #ignored_cidrs == 0 then
+    return false
+  end
+
+  local ignored_cidrs_matcher, err = resty_ipmatcher.new(ignored_cidrs)
+  if not ignored_cidrs_matcher then
+    ngx_log(ngx_ERR, "failed to initialize resty-ipmatcher: ", err)
+    return false
+  end
+
+  local is_ignored
+  is_ignored, err = ignored_cidrs_matcher:match(ngx.var.remote_addr)
+  if err then
+    ngx_log(ngx_ERR, "failed to match ip: '",
+      ngx.var.remote_addr, "': ", err)
+    return false
+  end
+
+  return is_ignored
+end
+
 local function is_enabled(config, location_config)
   if config.memcached.host == "" or config.memcached.port == 0 then
     return false
@@ -27,7 +50,9 @@ local function is_enabled(config, location_config)
     return false
   end
 
-  -- TODO: also check if remote_addr is ignored in location_config.global_throttle.ignored_cidrs
+  if should_ignore_request(location_config.ignored_cidrs) then
+    return false
+  end
 
   return true
 end

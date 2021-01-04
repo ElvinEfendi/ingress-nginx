@@ -33,9 +33,13 @@ end
 local function assert_short_circuits(f)
   local resty_global_throttle = require_without_cache("resty.global_throttle")
   local resty_global_throttle_new_spy = spy.on(resty_global_throttle, "new")
+  local global_throttle = require_without_cache("global_throttle")
 
-  f()
+  stub(ngx.shared.global_throttle_cache, "get")
 
+  f(global_throttle)
+
+  assert.stub(ngx.shared.global_throttle_cache.get).was_not_called()
   assert.spy(resty_global_throttle_new_spy).was_not_called()
 end
 
@@ -77,7 +81,13 @@ describe("global_throttle", function()
   local snapshot
 
   local NAMESPACE = "31285d47b1504dcfbd6f12c46d769f6e"
-  local LOCATION_CONFIG = { namespace = NAMESPACE, limit = 10, window_size = 60, key = nil }
+  local LOCATION_CONFIG = {
+    namespace = NAMESPACE,
+    limit = 10,
+    window_size = 60,
+    key = {},
+    ignored_cidrs = {},
+  }
   local CONFIG = {
     memcached = {
       host = "memc.default.svc.cluster.local", port = 11211,
@@ -100,8 +110,7 @@ describe("global_throttle", function()
   end)
 
   it("short circuits when memcached is not configured", function()
-    assert_short_circuits(function()
-      local global_throttle = require_without_cache("global_throttle")
+    assert_short_circuits(function(global_throttle)
       assert.has_no.errors(function()
         global_throttle.throttle({ memcached = { host = "", port = 0 } }, LOCATION_CONFIG)
       end)
@@ -109,8 +118,7 @@ describe("global_throttle", function()
   end)
 
   it("short circuits when limit or window_size is not configured", function()
-    assert_short_circuits(function()
-      local global_throttle = require_without_cache("global_throttle")
+    assert_short_circuits(function(global_throttle)
       local location_config_copy = util.deepcopy(LOCATION_CONFIG)
       location_config_copy.limit = 0
       assert.has_no.errors(function()
@@ -118,8 +126,7 @@ describe("global_throttle", function()
       end)
     end)
 
-    assert_short_circuits(function()
-      local global_throttle = require_without_cache("global_throttle")
+    assert_short_circuits(function(global_throttle)
       local location_config_copy = util.deepcopy(LOCATION_CONFIG)
       location_config_copy.window_size = 0
       assert.has_no.errors(function()
@@ -128,24 +135,24 @@ describe("global_throttle", function()
     end)
   end)
 
-  describe("when exceeding limit has already been cached", function()
+  it("short circuits when remote_addr is in ignored_cidrs", function()
+    local global_throttle = require_without_cache("global_throttle")
+    local location_config = util.deepcopy(LOCATION_CONFIG)
+    location_config.ignored_cidrs = { ngx.var.remote_addr }
+    assert_short_circuits(function(global_throttle)
+      assert.has_no.errors(function()
+        global_throttle.throttle(CONFIG, location_config)
+      end)
+    end)
+  end)
+
+  it("rejects when exceeding limit has already been cached", function()
     local key_value = "foo"
     local location_config = util.deepcopy(LOCATION_CONFIG)
     location_config.key = { { nil, nil, nil, key_value } }
+    cache_rejection_decision(NAMESPACE, key_value, 0.5)
 
-    before_each(function()
-      cache_rejection_decision(NAMESPACE, key_value, 0.5)
-    end)
-
-    it("uses namespaced key to access decision cache", function()
-      assert_request_rejected(CONFIG, location_config, { with_cache = true })
-    end)
-
-    it("short circuits", function()
-      assert_short_circuits(function()
-        assert_request_rejected(CONFIG, location_config, { with_cache = true })
-      end)
-    end)
+    assert_request_rejected(CONFIG, location_config, { with_cache = true })
   end)
 
   describe("when resty_global_throttle fails", function()
