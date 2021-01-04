@@ -56,9 +56,10 @@ You can add these Kubernetes annotations to specific Ingress objects to customiz
 |[nginx.ingress.kubernetes.io/http2-push-preload](#http2-push-preload)|"true" or "false"|
 |[nginx.ingress.kubernetes.io/limit-connections](#rate-limiting)|number|
 |[nginx.ingress.kubernetes.io/limit-rps](#rate-limiting)|number|
-|[nginx.ingress.kubernetes.io/global-rate-limit](#global-rate-limiting)|number|
-|[nginx.ingress.kubernetes.io/global-rate-limit-window](#global-rate-limiting)|duration|
-|[nginx.ingress.kubernetes.io/global-rate-limit-key](#global-rate-limiting)|string|
+|[nginx.ingress.kubernetes.io/global-rate-limit](#global-rate-limit)|number|
+|[nginx.ingress.kubernetes.io/global-rate-limit-window](#global-rate-limit)|duration|
+|[nginx.ingress.kubernetes.io/global-rate-limit-key](#global-rate-limit)|string|
+|[nginx.ingress.kubernetes.io/global-rate-limit-ignored-cidrs](#global-rate-limit)|string|
 |[nginx.ingress.kubernetes.io/permanent-redirect](#permanent-redirect)|string|
 |[nginx.ingress.kubernetes.io/permanent-redirect-code](#permanent-redirect-code)|number|
 |[nginx.ingress.kubernetes.io/temporal-redirect](#temporal-redirect)|string|
@@ -495,7 +496,7 @@ To configure settings globally for all Ingress rules, the `limit-rate-after` and
 
 The client IP address will be set based on the use of [PROXY protocol](./configmap.md#use-proxy-protocol) or from the `X-Forwarded-For` header value when [use-forwarded-headers](./configmap.md#use-forwarded-headers) is enabled.
 
-### Global Rate Limiting
+### Global Rate Limit
 
 The stock NGINX rate limiting does not share its counters among different NGINX instances.
 Given that most ingress-nginx deployments are elastic and number of replicas can change any day
@@ -527,8 +528,8 @@ Extract a path out into its own ingres if you need to isolate a certain path.
 
 * `nginx.ingress.kubernetes.io/global-rate-limit`: Configures maximum allowed number of requests per window. Required.
 * `nginx.ingress.kubernetes.io/global-rate-limit-window`: Configures a time window (i.e `1m`) that the limit is applied. Required.
-* `nginx.ingress.kubernetes.io/global-rate-limit-key`: Configures a key for counting the samples. Defaults to `$remote_addr`. You can also combine multiple NGINX variables here, like `${remote_addr}-${http_x_api_client}` which would mean the limit will be applied to requests coming from the same API client (indicated by `X-API-Client` HTTP request header)
-with the same source IP address.
+* `nginx.ingress.kubernetes.io/global-rate-limit-key`: Configures a key for counting the samples. Defaults to `$remote_addr`. You can also combine multiple NGINX variables here, like `${remote_addr}-${http_x_api_client}` which would mean the limit will be applied to requests coming from the same API client (indicated by `X-API-Client` HTTP request header) with the same source IP address.
+* `nginx.ingress.kubernetes.io/global-rate-limit-ignored-cidrs`: comma separated list of IPs and CIDRs to match client IP against. When there's a match request is not considered for rate limiting.
 
 ### Permanent Redirect
 
