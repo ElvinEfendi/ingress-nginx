@@ -18,7 +18,7 @@ end
 
 local function assert_request_not_rejected(config, location_config)
   stub(ngx, "exit")
-  stub(ngx.shared.global_throttle_cache, "safe_add")
+  local cache_safe_add_spy = spy.on(ngx.shared.global_throttle_cache, "safe_add")
 
   local global_throttle = require_without_cache("global_throttle")
   assert.has_no.errors(function()
@@ -27,20 +27,21 @@ local function assert_request_not_rejected(config, location_config)
 
   assert.stub(ngx.exit).was_not_called()
   assert.is_nil(ngx.var.global_rate_limit_exceeding)
-  assert.stub(ngx.shared.global_throttle_cache.safe_add).was_not_called()
+  assert.spy(cache_safe_add_spy).was_not_called()
 end
 
 local function assert_short_circuits(f)
+  local cache_get_spy = spy.on(ngx.shared.global_throttle_cache, "get")
+
   local resty_global_throttle = require_without_cache("resty.global_throttle")
   local resty_global_throttle_new_spy = spy.on(resty_global_throttle, "new")
-  local global_throttle = require_without_cache("global_throttle")
 
-  stub(ngx.shared.global_throttle_cache, "get")
+  local global_throttle = require_without_cache("global_throttle")
 
   f(global_throttle)
 
-  assert.stub(ngx.shared.global_throttle_cache.get).was_not_called()
   assert.spy(resty_global_throttle_new_spy).was_not_called()
+  assert.spy(cache_get_spy).was_not_called()
 end
 
 local function assert_fails_open(config, location_config, ...)
@@ -75,6 +76,7 @@ local function cache_rejection_decision(namespace, key_value, desired_delay)
   local ok, err = ngx.shared.global_throttle_cache:safe_add(namespaced_key_value, true, desired_delay)
   assert.is_nil(err)
   assert.is_true(ok)
+  assert.is_true(ngx.shared.global_throttle_cache:get(namespaced_key_value))
 end
 
 describe("global_throttle", function()
